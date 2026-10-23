@@ -13,6 +13,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <iphlpapi.h>
+#include <netioapi.h>
 #include <ifdef.h>
 #elif defined(Q_OS_LINUX)
 #include <unistd.h>
