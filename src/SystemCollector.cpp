@@ -11,9 +11,13 @@
 #include <cstdint>
 
 #ifdef Q_OS_WIN
+// Windows SDK netioapi declarations require ws2ipdef.h before iphlpapi.h.
+// Include Winsock2 before windows.h to avoid legacy winsock.h conflicts.
+#include <winsock2.h>
+#include <ws2def.h>
+#include <ws2ipdef.h>
 #include <windows.h>
 #include <iphlpapi.h>
-#include <netioapi.h>
 #include <ifdef.h>
 #elif defined(Q_OS_LINUX)
 #include <unistd.h>
