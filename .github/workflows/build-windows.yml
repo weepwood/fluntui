@@ -43,9 +43,9 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          & .\dist\FluentSystemInfo\fluent-system-info.exe --smoke
-          Write-Host "Packaged widget smoke exit code: $LASTEXITCODE"
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged widget smoke failed' }
+          $process = Start-Process -FilePath (Resolve-Path '.\dist\FluentSystemInfo\fluent-system-info.exe').Path -ArgumentList '--smoke' -Wait -PassThru
+          Write-Host "Packaged widget smoke exit code: $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) { throw 'Packaged widget smoke failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: FluentSystemInfo-Windows-x64

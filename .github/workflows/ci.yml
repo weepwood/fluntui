@@ -57,6 +57,6 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          & .\dist\smoke\fluent-system-info.exe --smoke
-          Write-Host "Widget smoke exit code: $LASTEXITCODE"
-          if ($LASTEXITCODE -ne 0) { throw 'FluentQt widget smoke test failed' }
+          $process = Start-Process -FilePath (Resolve-Path '.\dist\smoke\fluent-system-info.exe').Path -ArgumentList '--smoke' -Wait -PassThru
+          Write-Host "Widget smoke exit code: $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) { throw 'FluentQt widget smoke test failed' }

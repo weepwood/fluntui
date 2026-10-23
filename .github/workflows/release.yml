@@ -100,9 +100,9 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare.outputs.version }}
         run: |
           $exe = "dist/FluentSystemInfo-$env:RELEASE_TAG-Windows-x64/fluent-system-info.exe"
-          & $exe --smoke
-          Write-Host "Packaged smoke exit code: $LASTEXITCODE"
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged widget smoke test failed' }
+          $process = Start-Process -FilePath (Resolve-Path $exe).Path -ArgumentList '--smoke' -Wait -PassThru
+          Write-Host "Packaged smoke exit code: $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) { throw 'Packaged widget smoke test failed' }
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
