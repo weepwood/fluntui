@@ -21,7 +21,7 @@
 - 每 **2 秒** 采样；手动刷新
 - 采样只读取本机系统计数器，无网络请求和遥测
 - HiDPI 初始化；Qt Creator/CMake 开发流程
-- `--smoke`：1.5 秒后自动退出的 GUI 冒烟模式
+- `--smoke`：在 offscreen 模式初始化 Qt/FluentQt 基础控件并短暂运行事件循环，不创建依赖 Windows 原生窗口效果的主窗口；不能替代 GUI 视觉验收
 
 ## 支持范围
 
@@ -75,7 +75,7 @@ ctest --test-dir build-core --output-on-failure
 
 ## GitHub Actions：自动编译与发布
 
-- **持续集成**（`.github/workflows/ci.yml`）：向 `main` 推送代码、创建 PR 或手动运行时，执行 Linux 格式化逻辑测试、Windows MSVC/Qt 6/FluentQt 编译、CTest 和无界面冒烟测试。
+- **持续集成**（`.github/workflows/ci.yml`）：向 `main` 推送代码、创建 PR 或手动运行时，执行 Linux 格式化逻辑测试、Windows MSVC/Qt 6/FluentQt 编译、CTest 和已部署 Qt 运行库的无界面 FluentQt 控件测试。
 - **自动 Release**（`.github/workflows/release.yml`）：首次推送新版本号至 `main`，或推送与 CMake 版本号一致的 `vX.Y.Z` 标签，会执行 Windows 编译、测试、`windeployqt` 运行库部署、ZIP 打包、SHA256 校验和 GitHub Release 发布。支持手动运行 workflow。**已有版本的 Release 不会被覆盖**。
 - **手动打包**（`.github/workflows/build-windows.yml`）：生成 Actions Artifacts，**不创建 Release**，适合验收构建。
 
@@ -92,7 +92,7 @@ git tag v0.2.1
 git push origin v0.2.1
 ```
 
-ZIP 为便携目录，包含 EXE、Qt 运行库和必要平台插件，不是单文件 EXE 或安装器。尚未代码签名；Windows SmartScreen 可能提示。首次 CI 编译能否通过取决于 FluentQt 上游版本与 Qt SDK 的实际兼容性，请以 Actions 结果为准。**Release 只有在 Windows 编译、单元测试和 GUI 冒烟检查成功后才会创建。**
+ZIP 为便携目录，包含 EXE、Qt 运行库和必要平台插件，不是单文件 EXE 或安装器。尚未代码签名；Windows SmartScreen 可能提示。首次 CI 编译能否通过取决于 FluentQt 上游版本与 Qt SDK 的实际兼容性，请以 Actions 结果为准。**Release 只有在 Windows 编译、单元测试和已部署 Qt 的无界面控件初始化检查成功后才会创建。完整窗口仍需 Windows 实机验收。**
 
 ## 项目结构
 

@@ -28,13 +28,6 @@ jobs:
         run: cmake --build build --config Release --parallel 4
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
-      - name: Smoke test
-        shell: pwsh
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          & .\build\Release\fluent-system-info.exe --smoke
-          if ($LASTEXITCODE -ne 0) { throw 'GUI smoke test failed' }
       - name: Package with Qt runtime
         shell: pwsh
         run: |
@@ -45,6 +38,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'windeployqt failed' }
           if (-not (Test-Path dist/FluentSystemInfo/platforms/qwindows.dll)) { throw 'Qt platform plugin missing' }
           Compress-Archive -Path dist/FluentSystemInfo -DestinationPath dist/FluentSystemInfo-Windows-x64.zip -Force
+      - name: Packaged widget smoke test
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          & .\dist\FluentSystemInfo\fluent-system-info.exe --smoke
+          Write-Host "Packaged widget smoke exit code: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged widget smoke failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: FluentSystemInfo-Windows-x64

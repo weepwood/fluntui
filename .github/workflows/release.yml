@@ -73,13 +73,6 @@ jobs:
         run: cmake --build build --config Release --parallel 4
       - name: Run unit tests
         run: ctest --test-dir build --build-config Release --output-on-failure
-      - name: Run GUI smoke test
-        shell: pwsh
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          & .\build\Release\fluent-system-info.exe --smoke
-          if ($LASTEXITCODE -ne 0) { throw 'GUI smoke test failed' }
       - name: Deploy Qt dependencies and package
         shell: pwsh
         env:
@@ -100,6 +93,16 @@ jobs:
           $hash = (Get-FileHash "dist/$package.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $package.zip" | Set-Content 'dist/SHA256SUMS.txt' -Encoding ascii
           Write-Host "Package ready: dist/$package.zip; SHA256 $hash"
+      - name: Test packaged FluentQt widgets offscreen
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          RELEASE_TAG: ${{ needs.prepare.outputs.version }}
+        run: |
+          $exe = "dist/FluentSystemInfo-$env:RELEASE_TAG-Windows-x64/fluent-system-info.exe"
+          & $exe --smoke
+          Write-Host "Packaged smoke exit code: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged widget smoke test failed' }
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:

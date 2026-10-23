@@ -16,10 +16,17 @@ int main(int argc, char* argv[]) {
     QFont font(QStringLiteral("Microsoft YaHei UI"));
     font.setPointSize(10);
     app.setFont(font);
+    // CI uses offscreen Qt; only smoke-test headless-safe widgets here.
+    // The native FluentQt window chrome requires a real Windows desktop.
+    if (app.arguments().contains(QStringLiteral("--smoke"))) {
+        fluent::basicinput::Button button(QStringLiteral("FluentQt smoke"));
+        fluent::layout::Card card;
+        button.show();
+        card.show();
+        QTimer::singleShot(200, &app, &QCoreApplication::quit);
+        return app.exec();
+    }
     MainWindow window;
     window.show();
-    if (app.arguments().contains(QStringLiteral("--smoke"))) {
-        QTimer::singleShot(1500, &app, &QCoreApplication::quit);
-    }
     return app.exec();
 }

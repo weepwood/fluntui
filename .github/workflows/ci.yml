@@ -44,10 +44,19 @@ jobs:
         run: cmake --build build --config Release --parallel 4
       - name: CTest
         run: ctest --test-dir build --build-config Release --output-on-failure
-      - name: GUI offscreen smoke test
+      - name: Deploy Qt runtime for smoke test
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/smoke | Out-Null
+          Copy-Item build/Release/fluent-system-info.exe dist/smoke/
+          & windeployqt --release --compiler-runtime --no-translations --dir dist/smoke dist/smoke/fluent-system-info.exe
+          if ($LASTEXITCODE -ne 0) { throw 'windeployqt failed' }
+          if (-not (Test-Path dist/smoke/platforms/qwindows.dll)) { throw 'Missing Qt platform plugin' }
+      - name: FluentQt widget offscreen smoke test
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          & .\build\Release\fluent-system-info.exe --smoke
-          if ($LASTEXITCODE -ne 0) { throw 'GUI smoke test failed' }
+          & .\dist\smoke\fluent-system-info.exe --smoke
+          Write-Host "Widget smoke exit code: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { throw 'FluentQt widget smoke test failed' }
