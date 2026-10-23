@@ -1,0 +1,122 @@
+name: Release Windows x64
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read and validate release version
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          app_version=$(sed -nE 's/^project\(FluentSystemInfo VERSION ([0-9]+\.[0-9]+\.[0-9]+) LANGUAGES CXX\)$/\1/p' CMakeLists.txt)
+          if [[ -z "$app_version" ]]; then
+            echo 'ERROR: Missing project semantic version in CMakeLists.txt' >&2
+            exit 1
+          fi
+          tag="v$app_version"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo "ERROR: tag $GITHUB_REF_NAME does not match CMake project version $tag" >&2
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; no overwrite."
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  release-windows:
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.repository }}-${{ needs.prepare.outputs.version }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt 6 / MSVC x64
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Configure CMake
+        shell: pwsh
+        run: >-
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          -DFSI_BUILD_APP=ON -DFSI_BUILD_TESTS=ON
+          -DFLUENT_QT_BUILD_GALLERY=OFF -DFLUENT_QT_BUILD_EXAMPLES=OFF
+          -DFLUENT_QT_BUILD_TESTS=OFF -DFLUENT_QT_INSTALL=OFF
+      - name: Build release and core tests
+        run: cmake --build build --config Release --parallel 4
+      - name: Run unit tests
+        run: ctest --test-dir build --build-config Release --output-on-failure
+      - name: Run GUI smoke test
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          & .\build\Release\fluent-system-info.exe --smoke
+          if ($LASTEXITCODE -ne 0) { throw 'GUI smoke test failed' }
+      - name: Deploy Qt dependencies and package
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = 'FluentSystemInfo-' + $env:RELEASE_TAG + '-Windows-x64'
+          $folder = Join-Path 'dist' $package
+          New-Item -ItemType Directory -Path $folder -Force | Out-Null
+          Copy-Item 'build/Release/fluent-system-info.exe' "$folder/"
+          & windeployqt --release --compiler-runtime --no-translations --dir "$folder" "$folder/fluent-system-info.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'windeployqt failed' }
+          if (-not (Test-Path "$folder/Qt6Core.dll")) { throw 'Missing Qt6Core.dll after deployment' }
+          if (-not (Test-Path "$folder/platforms/qwindows.dll")) { throw 'Missing Qt Windows platform plugin' }
+          Copy-Item 'README.md' "$folder/README.md"
+          Copy-Item 'LICENSE' "$folder/LICENSE"
+          Compress-Archive -Path "$folder" -DestinationPath "dist/$package.zip" -CompressionLevel Optimal -Force
+          $hash = (Get-FileHash "dist/$package.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $package.zip" | Set-Content 'dist/SHA256SUMS.txt' -Encoding ascii
+          Write-Host "Package ready: dist/$package.zip; SHA256 $hash"
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-x64-${{ needs.prepare.outputs.version }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Fluent System Info ${{ needs.prepare.outputs.version }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          fail_on_unmatched_files: true

@@ -1,0 +1,53 @@
+name: C++ validation
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure portable C++ tests
+        run: cmake -S . -B build-core -G Ninja -DFSI_BUILD_APP=OFF -DFSI_BUILD_TESTS=ON
+      - name: Build tests
+        run: cmake --build build-core --parallel
+      - name: Run CTest
+        run: ctest --test-dir build-core --output-on-failure
+
+  windows-gui:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt 6 for MSVC 2022
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Configure Qt + FluentQt
+        shell: pwsh
+        run: >-
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          -DFSI_BUILD_APP=ON -DFSI_BUILD_TESTS=ON
+          -DFLUENT_QT_BUILD_GALLERY=OFF -DFLUENT_QT_BUILD_EXAMPLES=OFF
+          -DFLUENT_QT_BUILD_TESTS=OFF -DFLUENT_QT_INSTALL=OFF
+      - name: Build GUI and tests
+        run: cmake --build build --config Release --parallel 4
+      - name: CTest
+        run: ctest --test-dir build --build-config Release --output-on-failure
+      - name: GUI offscreen smoke test
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          & .\build\Release\fluent-system-info.exe --smoke
+          if ($LASTEXITCODE -ne 0) { throw 'GUI smoke test failed' }

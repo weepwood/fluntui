@@ -1,0 +1,23 @@
+# CMake / IDE
+build/
+build-*/
+cmake-build-*/
+.vs/
+.vscode/
+.idea/
+CMakeUserPresets.json
+# C++ binaries
+*.exe
+*.dll
+*.pdb
+*.obj
+*.o
+*.a
+*.lib
+*.dylib
+# Qt
+*.user
+*.user.*
+# Misc
+.DS_Store
+Thumbs.db
