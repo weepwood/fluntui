@@ -1,13 +1,12 @@
 #include "MainWindow.h"
 #include "Formatting.h"
+#include "SnapshotExport.h"
 #include "TrendGraph.h"
 #include <QColor>
 #include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
-#include <QJsonArray>
 #include <QJsonDocument>
-#include <QJsonObject>
 #include <QMessageBox>
 #include <QSaveFile>
 #include <QStorageInfo>
@@ -546,51 +545,10 @@ void MainWindow::exportSnapshot() {
         this, QStringLiteral("导出本机信息"), suggestedPath, QStringLiteral("JSON 文件 (*.json)"));
     if (path.isEmpty()) return;
 
-    const SystemSnapshot& s = m_lastSnapshot;
-    QJsonArray volumes;
-    for (const DiskInfo& disk : s.disks) {
-        const quint64 used = disk.total - std::min(disk.free, disk.total);
-        volumes.append(QJsonObject{
-            {QStringLiteral("path"), disk.name},
-            {QStringLiteral("filesystem"), disk.filesystem},
-            {QStringLiteral("totalBytes"), static_cast<double>(disk.total)},
-            {QStringLiteral("availableBytes"), static_cast<double>(disk.free)},
-            {QStringLiteral("usedBytes"), static_cast<double>(used)},
-            {QStringLiteral("usedPercent"), fsi::percentage(used, disk.total)}
-        });
-    }
-    const QJsonObject payload{
-        {QStringLiteral("schemaVersion"), 1},
-        {QStringLiteral("appVersion"), QString::fromLatin1(FSI_APP_VERSION)},
-        {QStringLiteral("sampledAt"), m_sampledAtIso},
-        {QStringLiteral("exportedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-        {QStringLiteral("hardware"), QJsonObject{
-            {QStringLiteral("hostname"), s.hostname},
-            {QStringLiteral("systemName"), s.systemName},
-            {QStringLiteral("architecture"), s.architecture},
-            {QStringLiteral("processor"), s.cpuName},
-            {QStringLiteral("graphicsAdapter"), s.gpuName},
-            {QStringLiteral("logicalCores"), s.logicalCores},
-            {QStringLiteral("ipv4"), s.ipv4}
-        }},
-        {QStringLiteral("resources"), QJsonObject{
-            {QStringLiteral("cpuPercent"), s.cpuPercent < 0
-                ? QJsonValue(QJsonValue::Null) : QJsonValue(s.cpuPercent)},
-            {QStringLiteral("memoryTotalBytes"), static_cast<double>(s.memoryTotal)},
-            {QStringLiteral("memoryAvailableBytes"), static_cast<double>(s.memoryAvailable)},
-            {QStringLiteral("uptimeSeconds"), static_cast<double>(s.uptime)}
-        }},
-        {QStringLiteral("network"), QJsonObject{
-            {QStringLiteral("supported"), s.networkSupported},
-            {QStringLiteral("downloadBytesPerSecond"), s.downloadBps},
-            {QStringLiteral("uploadBytesPerSecond"), s.uploadBps},
-            {QStringLiteral("downloadedTotalBytes"), static_cast<double>(s.downloadedTotal)},
-            {QStringLiteral("uploadedTotalBytes"), static_cast<double>(s.uploadedTotal)}
-        }},
-        {QStringLiteral("disks"), volumes}
-    };
-
-    const QByteArray serialized = QJsonDocument(payload).toJson(QJsonDocument::Indented);
+    const QByteArray serialized = QJsonDocument(
+        fsi::snapshotToJson(m_lastSnapshot, QString::fromLatin1(FSI_APP_VERSION),
+                            m_sampledAtIso, QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)))
+        .toJson(QJsonDocument::Indented);
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         QMessageBox::warning(this, QStringLiteral("导出失败"), file.errorString());

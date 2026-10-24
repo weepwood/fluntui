@@ -88,7 +88,7 @@ ctest --test-dir build-core --output-on-failure
 
 ## GitHub Actions：自动编译与发布
 
-- **持续集成**（`.github/workflows/ci.yml`）：向 `main` 推送代码、创建 PR 或手动运行时，执行 Linux 格式化逻辑测试、Windows MSVC/Qt 6/FluentQt 编译、CTest 和已部署 Qt 运行库的无界面 FluentQt 控件测试。
+- **持续集成**（`.github/workflows/ci.yml`）：向 `main` 推送代码、创建 PR 或手动运行时，执行 Linux 格式化逻辑测试、Windows MSVC/Qt 6/FluentQt 编译、JSON 快照单元测试、CTest 和已部署 Qt 运行库的无界面 FluentQt 控件测试。
 - **自动 Release**（`.github/workflows/release.yml`）：首次推送新版本号至 `main`，或推送与 CMake 版本号一致的 `vX.Y.Z` 标签，会执行 Windows 编译、测试、`windeployqt` 运行库部署、ZIP 打包、SHA256 校验和 GitHub Release 发布。支持手动运行 workflow。**已有版本的 Release 不会被覆盖**。
 - **手动打包**（`.github/workflows/build-windows.yml`）：生成 Actions Artifacts，**不创建 Release**，适合验收构建。
 
@@ -117,8 +117,10 @@ FluentSystemInfo/
 │  ├─ MainWindow.{h,cpp}         # FluentQt 界面与页面
 │  ├─ SystemCollector.{h,cpp}    # Win32/Qt/Linux 只读采集
 │  ├─ TrendGraph.{h,cpp}         # QPainter 趋势图
+│  ├─ SnapshotExport.{h,cpp}     # JSON 快照生成（可单测）
 │  └─ Formatting.{h,cpp}         # 独立于 Qt 的数据格式化
 ├─ tests/format_tests.cpp
+├─ tests/snapshot_tests.cpp
 ├─ .github/workflows/
 │  ├─ ci.yml
 │  ├─ release.yml
