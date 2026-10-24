@@ -39,6 +39,9 @@ private:
     QLabel* addInfoRow(QVBoxLayout* layout, const QString& title);
     void selectPage(int index);
     void refresh();
+    void toggleMonitoring();
+    void updateMonitoringControls();
+    void exportSnapshot();
     void applyTheme(bool dark);
     void restoreWindowGeometry();
     QString formatBytes(quint64 bytes) const;
@@ -52,6 +55,8 @@ private:
     QLabel* m_device = nullptr;
     fluent::FontIcon* m_brandIcon = nullptr;
     fluent::basicinput::Button* m_themeButton = nullptr;
+    fluent::basicinput::Button* m_pauseButton = nullptr;
+    fluent::basicinput::Button* m_intervalButton = nullptr;
     UsageTile m_cpu;
     UsageTile m_memory;
     UsageTile m_disk;
@@ -74,5 +79,11 @@ private:
     QVector<DiskRow> m_diskRows;
     QWidget* m_contentRoot = nullptr;
     bool m_dark = true;
+    bool m_paused = false;
+    bool m_hasSnapshot = false;
+    int m_refreshIntervalMs = 2000;
+    QString m_lastUpdateTime;
+    QString m_sampledAtIso;
+    SystemSnapshot m_lastSnapshot;
     QTimer* m_refreshTimer = nullptr;
 };

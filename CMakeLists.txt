@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(FluentSystemInfo VERSION 0.3.0 LANGUAGES CXX)
+project(FluentSystemInfo VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -42,8 +42,16 @@ if(FSI_BUILD_APP)
         src/SystemCollector.cpp src/SystemCollector.h
         src/TrendGraph.cpp src/TrendGraph.h
         src/Formatting.cpp src/Formatting.h
+        src/SnapshotExport.cpp src/SnapshotExport.h
     )
     target_link_libraries(fluent-system-info PRIVATE FluentQt::FluentQt Qt6::Widgets Qt6::Network)
+    if(FSI_BUILD_TESTS)
+        add_executable(fsi_snapshot_tests
+            tests/snapshot_tests.cpp src/SnapshotExport.cpp src/Formatting.cpp)
+        target_include_directories(fsi_snapshot_tests PRIVATE src)
+        target_link_libraries(fsi_snapshot_tests PRIVATE Qt6::Core)
+        add_test(NAME snapshot-export COMMAND fsi_snapshot_tests)
+    endif()
     target_compile_definitions(fluent-system-info PRIVATE
         FSI_APP_VERSION="${PROJECT_VERSION}"
         UNICODE _UNICODE
