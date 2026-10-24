@@ -35,6 +35,8 @@ class SystemCollector {
 public:
     SystemCollector();
     SystemSnapshot sample();
+    // Reset deltas after monitoring has been paused; the next sample warms up counters.
+    void resetRateBaselines() { m_hasCpu = false; m_hasNetwork = false; }
 private:
     void ensureStaticInfo();
     double sampleCpu();

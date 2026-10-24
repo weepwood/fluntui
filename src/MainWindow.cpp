@@ -512,6 +512,7 @@ void MainWindow::toggleMonitoring() {
         if (m_paused) {
             m_refreshTimer->stop();
         } else {
+            m_collector.resetRateBaselines();
             refresh();
             m_refreshTimer->start(m_refreshIntervalMs);
         }
