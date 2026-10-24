@@ -25,6 +25,7 @@ struct DiskRow {
 class MainWindow : public fluent::windowing::Window {
 public:
     MainWindow();
+    ~MainWindow() override;
 private:
     QWidget* createSidebar();
     QWidget* createHeader();
@@ -34,11 +35,12 @@ private:
     QWidget* createNetwork();
     QWidget* makePage(const QString& title, const QString& description, QVBoxLayout*& layout);
     UsageTile createUsageTile(QGridLayout* grid, int row, int column, const QString& heading,
-                              const QString& badge, bool showProgress = true);
+                              const QString& iconCatalogName, const QString& badge, bool showProgress = true);
     QLabel* addInfoRow(QVBoxLayout* layout, const QString& title);
     void selectPage(int index);
     void refresh();
     void applyTheme(bool dark);
+    void restoreWindowGeometry();
     QString formatBytes(quint64 bytes) const;
     void rebuildDiskCards(const QVector<DiskInfo>& disks);
 
@@ -48,6 +50,7 @@ private:
     QLabel* m_pageTitle = nullptr;
     QLabel* m_status = nullptr;
     QLabel* m_device = nullptr;
+    fluent::FontIcon* m_brandIcon = nullptr;
     fluent::basicinput::Button* m_themeButton = nullptr;
     UsageTile m_cpu;
     UsageTile m_memory;

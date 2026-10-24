@@ -15,10 +15,11 @@
 
 ### FluentQt 原生组件
 
-项目直接链接 `FluentQt::FluentQt`，使用 `fluent::windowing::Window`、`fluent::layout::Card`、`fluent::basicinput::Button`、`fluent::status_info::ProgressBar`、`fluent::FluentElement`。折线图以 C++ QWidget/QPainter 实现，页面组织与布局基于 Qt Widgets。
+项目直接链接 `FluentQt::FluentQt`，使用 `fluent::windowing::Window`、`fluent::layout::Card`、`fluent::basicinput::Button`、`fluent::status_info::ProgressBar`、`fluent::FluentElement`。界面图标来自 FluentQt 内置的 **Fluent UI System Icons** 字体（`fluent::FontIcon` 与 `Button::setIconGlyph`），按主题自动适配颜色，跨平台渲染一致、缩放清晰，不依赖系统图标字体。折线图以 C++ QWidget/QPainter 实现，页面组织与布局基于 Qt Widgets。
 
-- 深色/浅色切换与 `QSettings` 本地记忆
-- 每 **2 秒** 采样；手动刷新
+- 深色/浅色切换与 `QSettings` 本地记忆；记住窗口位置和大小（显示器布局变化后自动回到可见区域）
+- 每 **2 秒** 采样；手动刷新；Ctrl+1–4 快速切换页面
+- 硬件静态信息（CPU/显卡/系统型号）仅在首次采样读取一次，后续采样只更新动态指标
 - 采样只读取本机系统计数器，无网络请求和遥测
 - HiDPI 初始化；Qt Creator/CMake 开发流程
 - `--smoke`：在 offscreen 模式初始化 Qt/FluentQt 基础控件并短暂运行事件循环，不创建依赖 Windows 原生窗口效果的主窗口；不能替代 GUI 视觉验收

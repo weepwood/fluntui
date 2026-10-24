@@ -1,12 +1,19 @@
 #include "MainWindow.h"
 #include "Formatting.h"
 #include "TrendGraph.h"
+#include <QColor>
 #include <QDateTime>
+#include <QGuiApplication>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QKeySequence>
 #include <QLabel>
+#include <QPoint>
+#include <QRect>
+#include <QScreen>
 #include <QScrollArea>
 #include <QSettings>
+#include <QShortcut>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QTimer>
@@ -15,6 +22,12 @@
 #include <algorithm>
 
 namespace {
+// 内置 Fluent UI System Icons 目录名 → 字形；由库按主题颜色和光学尺寸绘制。
+fluent::FontIcon* fontIcon(const QString& catalogName, QWidget* parent = nullptr, int size = 16) {
+    auto* icon = new fluent::FontIcon(Typography::Icons::glyph(catalogName), parent);
+    icon->setIconSize(size);
+    return icon;
+}
 QLabel* label(const QString& content, const char* role, QWidget* parent = nullptr) {
     auto* result = new QLabel(content, parent);
     result->setObjectName(QString::fromUtf8(role));
@@ -39,6 +52,7 @@ MainWindow::MainWindow() {
     setWindowTitle(QStringLiteral("Fluent System Info · 电脑信息"));
     setMinimumSize(900, 620);
     resize(1220, 810);
+    restoreWindowGeometry();
     m_contentRoot = new QWidget;
     m_contentRoot->setObjectName(QStringLiteral("contentRoot"));
     auto* frame = new QHBoxLayout(m_contentRoot);
@@ -62,6 +76,10 @@ MainWindow::MainWindow() {
     right->addWidget(m_pages, 1);
     frame->addWidget(content, 1);
     setContentWidget(m_contentRoot);
+    for (int index = 0; index < 4; ++index) {
+        auto* shortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+%1").arg(index + 1)), this);
+        QObject::connect(shortcut, &QShortcut::activated, this, [this, index] { selectPage(index); });
+    }
 
     QSettings settings;
     applyTheme(settings.value(QStringLiteral("darkTheme"), true).toBool());
@@ -73,6 +91,26 @@ MainWindow::MainWindow() {
     m_refreshTimer->start();
 }
 
+MainWindow::~MainWindow() {
+    QSettings().setValue(QStringLiteral("windowGeometry"), saveGeometry());
+}
+
+void MainWindow::restoreWindowGeometry() {
+    const QByteArray geometry = QSettings().value(QStringLiteral("windowGeometry")).toByteArray();
+    if (!geometry.isEmpty()) restoreGeometry(geometry);
+    // 显示器布局可能在两次启动之间变化；若恢复的位置已不可见，回退到主屏幕中央。
+    const QRect bounds = this->geometry();
+    const auto screens = QGuiApplication::screens();
+    bool onScreen = false;
+    for (const auto* screen : screens) {
+        if (screen->availableGeometry().intersects(bounds)) { onScreen = true; break; }
+    }
+    if (!onScreen && !screens.isEmpty()) {
+        const QRect workArea = screens.first()->availableGeometry();
+        move(workArea.center() - QPoint(width() / 2, height() / 2));
+    }
+}
+
 QWidget* MainWindow::createSidebar() {
     auto* sidebar = new QWidget(m_contentRoot);
     sidebar->setObjectName(QStringLiteral("sidebar"));
@@ -80,18 +118,30 @@ QWidget* MainWindow::createSidebar() {
     auto* layout = new QVBoxLayout(sidebar);
     layout->setContentsMargins(17, 24, 17, 22);
     layout->setSpacing(10);
-    auto* brand = label(QStringLiteral("◉   FLUENT / SYSTEM"), "brand", sidebar);
-    layout->addWidget(brand);
-    auto* description = label(QStringLiteral("Hardware Monitor  ·  v0.2.0"), "eyebrow", sidebar);
+    auto* brandRow = new QHBoxLayout;
+    brandRow->setSpacing(8);
+    m_brandIcon = new fluent::FontIcon(Typography::Icons::glyph(QStringLiteral("ic_fluent_gauge_20_regular")), sidebar);
+    m_brandIcon->setIconSize(18);
+    brandRow->addWidget(m_brandIcon);
+    brandRow->addWidget(label(QStringLiteral("FLUENT / SYSTEM"), "brand", sidebar), 0, Qt::AlignVCenter);
+    brandRow->addStretch();
+    layout->addLayout(brandRow);
+    auto* description = label(QStringLiteral("Hardware Monitor  ·  v") + QString::fromLatin1(FSI_APP_VERSION), "eyebrow", sidebar);
     layout->addWidget(description);
     layout->addSpacing(35);
     layout->addWidget(label(QStringLiteral("工作空间  /  WORKSPACE"), "eyebrow", sidebar));
 
-    const QStringList names = {QStringLiteral("◫   系统总览"), QStringLiteral("▣   硬件详情"),
-                               QStringLiteral("▤   磁盘存储"), QStringLiteral("⇅   网络监控")};
+    const QStringList names = {QStringLiteral("系统总览"), QStringLiteral("硬件详情"),
+                               QStringLiteral("磁盘存储"), QStringLiteral("网络监控")};
+    const QStringList icons = {QStringLiteral("ic_fluent_home_20_regular"),
+                               QStringLiteral("ic_fluent_developer_board_20_regular"),
+                               QStringLiteral("ic_fluent_hard_drive_20_regular"),
+                               QStringLiteral("ic_fluent_globe_20_regular")};
     for (int index = 0; index < names.size(); ++index) {
         auto* button = new fluent::basicinput::Button(names[index], sidebar);
         button->setFluentStyle(fluent::basicinput::Button::Subtle);
+        button->setIconGlyph(Typography::Icons::glyph(icons[index]), 20);
+        button->setFluentLayout(fluent::basicinput::Button::IconBefore);
         button->setMinimumHeight(44);
         button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         QObject::connect(button, &QPushButton::clicked, this, [this, index] { selectPage(index); });
@@ -99,9 +149,13 @@ QWidget* MainWindow::createSidebar() {
         layout->addWidget(button);
     }
     layout->addStretch();
-    auto* local = label(QStringLiteral("●  本地数据 · 无云端传输"), "sidebarFooter", sidebar);
+    auto* footerRow = new QHBoxLayout;
+    footerRow->setSpacing(8);
+    footerRow->addWidget(fontIcon(QStringLiteral("ic_fluent_shield_20_regular"), sidebar, 14));
+    auto* local = label(QStringLiteral("本地数据 · 无云端传输"), "sidebarFooter", sidebar);
     local->setWordWrap(false);
-    layout->addWidget(local);
+    footerRow->addWidget(local, 0, Qt::AlignVCenter);
+    layout->addLayout(footerRow);
     return sidebar;
 }
 
@@ -118,14 +172,17 @@ QWidget* MainWindow::createHeader() {
     titles->addWidget(m_status);
     layout->addLayout(titles);
     layout->addStretch();
-    m_themeButton = new fluent::basicinput::Button(QStringLiteral("☾  深色模式"), header);
+    m_themeButton = new fluent::basicinput::Button(QStringLiteral("深色模式"), header);
+    m_themeButton->setFluentLayout(fluent::basicinput::Button::IconBefore);
     layout->addWidget(m_themeButton);
     QObject::connect(m_themeButton, &QPushButton::clicked, this, [this] {
         applyTheme(!m_dark);
         QSettings().setValue(QStringLiteral("darkTheme"), m_dark);
     });
-    auto* refreshButton = new fluent::basicinput::Button(QStringLiteral("⟳  刷新"), header);
+    auto* refreshButton = new fluent::basicinput::Button(QStringLiteral("刷新"), header);
     refreshButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    refreshButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_arrow_clockwise_20_regular")));
+    refreshButton->setFluentLayout(fluent::basicinput::Button::IconBefore);
     layout->addWidget(refreshButton);
     QObject::connect(refreshButton, &QPushButton::clicked, this, [this] { refresh(); });
     return header;
@@ -149,12 +206,14 @@ QWidget* MainWindow::makePage(const QString& title, const QString& description, 
 }
 
 UsageTile MainWindow::createUsageTile(QGridLayout* grid, int row, int column, const QString& heading,
-                                     const QString& badge, bool showProgress) {
+                                     const QString& iconCatalogName, const QString& badge, bool showProgress) {
     auto* surface = card();
     auto* vertical = new QVBoxLayout(surface);
     vertical->setContentsMargins(22, 20, 22, 21);
     vertical->setSpacing(10);
     auto* top = new QHBoxLayout;
+    top->setSpacing(8);
+    top->addWidget(fontIcon(iconCatalogName, surface), 0, Qt::AlignVCenter);
     top->addWidget(label(heading, "metricTitle", surface));
     top->addStretch();
     top->addWidget(label(badge, "metricBadge", surface));
@@ -197,10 +256,14 @@ QWidget* MainWindow::createOverview() {
     grid->setContentsMargins(0, 3, 0, 0);
     grid->setHorizontalSpacing(17);
     grid->setVerticalSpacing(17);
-    m_cpu = createUsageTile(grid, 0, 0, QStringLiteral("处理器 / CPU"), QStringLiteral("实时负载"));
-    m_memory = createUsageTile(grid, 0, 1, QStringLiteral("系统内存 / RAM"), QStringLiteral("已使用"));
-    m_disk = createUsageTile(grid, 1, 0, QStringLiteral("系统磁盘 / DISK"), QStringLiteral("首个卷"));
-    m_uptime = createUsageTile(grid, 1, 1, QStringLiteral("系统运行时间"), QStringLiteral("UPTIME"), false);
+    m_cpu = createUsageTile(grid, 0, 0, QStringLiteral("处理器 / CPU"),
+        QStringLiteral("ic_fluent_flash_20_regular"), QStringLiteral("实时负载"));
+    m_memory = createUsageTile(grid, 0, 1, QStringLiteral("系统内存 / RAM"),
+        QStringLiteral("ic_fluent_memory_16_regular"), QStringLiteral("已使用"));
+    m_disk = createUsageTile(grid, 1, 0, QStringLiteral("系统磁盘 / DISK"),
+        QStringLiteral("ic_fluent_hard_drive_20_regular"), QStringLiteral("首个卷"));
+    m_uptime = createUsageTile(grid, 1, 1, QStringLiteral("系统运行时间"),
+        QStringLiteral("ic_fluent_history_20_regular"), QStringLiteral("UPTIME"), false);
     page->addLayout(grid);
     page->addWidget(label(QStringLiteral("性能趋势  /  PERFORMANCE"), "sectionTitle"));
     auto* charts = new QHBoxLayout;
@@ -269,8 +332,10 @@ QWidget* MainWindow::createNetwork() {
         QStringLiteral("采集本机网络接口计数器；速率仅代表采样间隔内的平均值。"), page);
     auto* grid = new QGridLayout;
     grid->setSpacing(17);
-    m_down = createUsageTile(grid, 0, 0, QStringLiteral("接收 / DOWNLOAD"), QStringLiteral("每秒"), false);
-    m_up = createUsageTile(grid, 0, 1, QStringLiteral("发送 / UPLOAD"), QStringLiteral("每秒"), false);
+    m_down = createUsageTile(grid, 0, 0, QStringLiteral("接收 / DOWNLOAD"),
+        QStringLiteral("ic_fluent_arrow_download_20_regular"), QStringLiteral("每秒"), false);
+    m_up = createUsageTile(grid, 0, 1, QStringLiteral("发送 / UPLOAD"),
+        QStringLiteral("ic_fluent_arrow_upload_20_regular"), QStringLiteral("每秒"), false);
     page->addLayout(grid);
     auto* details = card();
     auto* detailsLayout = new QVBoxLayout(details);
@@ -392,7 +457,13 @@ void MainWindow::refresh() {
 void MainWindow::applyTheme(bool dark) {
     m_dark = dark;
     fluent::FluentElement::setTheme(dark ? fluent::FluentElement::Dark : fluent::FluentElement::Light);
-    if (m_themeButton) m_themeButton->setText(dark ? QStringLiteral("☾  深色模式") : QStringLiteral("☀  浅色模式"));
+    if (m_themeButton) {
+        m_themeButton->setText(dark ? QStringLiteral("深色模式") : QStringLiteral("浅色模式"));
+        m_themeButton->setIconGlyph(Typography::Icons::glyph(dark
+            ? QStringLiteral("ic_fluent_weather_moon_20_regular")
+            : QStringLiteral("ic_fluent_weather_sunny_20_regular")));
+    }
+    if (m_brandIcon) m_brandIcon->setColor(dark ? QColor(QStringLiteral("#75B7FF")) : QColor(QStringLiteral("#1676DE")));
     if (m_cpuChart) m_cpuChart->setDark(dark);
     if (m_memoryChart) m_memoryChart->setDark(dark);
     const QString foreground = dark ? QStringLiteral("#E7EDF6") : QStringLiteral("#152234");
