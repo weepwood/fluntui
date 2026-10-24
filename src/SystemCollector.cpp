@@ -5,6 +5,7 @@
 #include <QRegularExpression>
 #include <QSettings>
 #include <QStorageInfo>
+#include <QStringList>
 #include <QSysInfo>
 #include <QThread>
 #include <algorithm>
@@ -30,11 +31,18 @@ quint64 toInteger(const FILETIME& time) {
 }
 #endif
 #ifdef Q_OS_LINUX
-QString procLine(const QString& filename, const QString& prefix) {
+// /proc 伪文件的 stat 大小为 0，QFile::atEnd() 会立即返回 true，
+// readLine 循环读不到任何内容；必须一次 readAll() 后按行拆分。
+QStringList procLines(const QString& filename) {
     QFile file(filename);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-    while (!file.atEnd()) {
-        const QString line = QString::fromUtf8(file.readLine()).trimmed();
+    if (!file.open(QIODevice::ReadOnly)) return {};
+    QStringList lines;
+    const auto raw = file.readAll().split('\n');
+    for (const auto& line : raw) lines.append(QString::fromUtf8(line).trimmed());
+    return lines;
+}
+QString procLine(const QString& filename, const QString& prefix) {
+    for (const auto& line : procLines(filename)) {
         if (line.startsWith(prefix)) return line;
     }
     return {};
@@ -51,12 +59,13 @@ SystemCollector::SystemCollector() { m_clock.start(); }
 
 SystemSnapshot SystemCollector::sample() {
     SystemSnapshot result;
-    result.hostname = QSysInfo::machineHostName();
-    result.systemName = QSysInfo::prettyProductName();
-    result.cpuName = cpuModel();
-    result.gpuName = gpuModel();
-    result.architecture = QSysInfo::currentCpuArchitecture();
-    result.logicalCores = QThread::idealThreadCount();
+    ensureStaticInfo();
+    result.hostname = m_hostname;
+    result.systemName = m_systemName;
+    result.cpuName = m_cpuModel;
+    result.gpuName = m_gpuModel;
+    result.architecture = m_architecture;
+    result.logicalCores = m_logicalCores;
     result.cpuPercent = sampleCpu();
     sampleMemory(result);
     result.uptime = uptimeSeconds();
@@ -89,6 +98,19 @@ SystemSnapshot SystemCollector::sample() {
     return result;
 }
 
+// 这些字段在进程生命周期内不会变化；缓存后避免每个采样周期
+// 重复读取注册表、枚举显示设备和查询系统信息。
+void SystemCollector::ensureStaticInfo() {
+    if (m_hasStaticInfo) return;
+    m_hostname = QSysInfo::machineHostName();
+    m_systemName = QSysInfo::prettyProductName();
+    m_cpuModel = cpuModel();
+    m_gpuModel = gpuModel();
+    m_architecture = QSysInfo::currentCpuArchitecture();
+    m_logicalCores = QThread::idealThreadCount();
+    m_hasStaticInfo = true;
+}
+
 double SystemCollector::sampleCpu() {
     quint64 idle = 0;
     quint64 total = 0;
@@ -101,7 +123,8 @@ double SystemCollector::sampleCpu() {
     const QString line = procLine(QStringLiteral("/proc/stat"), QStringLiteral("cpu "));
     const auto numbers = line.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
     if (numbers.size() < 5) return -1;
-    for (int index = 1; index < numbers.size(); ++index) total += numbers[index].toULongLong();
+    // user/nice 已分别包含 guest/guest_nice 计数，只聚合前 8 个字段避免重复计算。
+    for (int index = 1; index < numbers.size() && index <= 8; ++index) total += numbers[index].toULongLong();
     idle = numbers[4].toULongLong();
     if (numbers.size() > 5) idle += numbers[5].toULongLong();
 #else
@@ -148,9 +171,10 @@ void SystemCollector::sampleNetwork(SystemSnapshot& result) {
     FreeMibTable(table);
 #elif defined(Q_OS_LINUX)
     QFile file(QStringLiteral("/proc/net/dev"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return;
-    while (!file.atEnd()) {
-        const auto line = QString::fromUtf8(file.readLine());
+    if (!file.open(QIODevice::ReadOnly)) return;
+    const auto lines = file.readAll().split('\n');
+    for (const auto& raw : lines) {
+        const QString line = QString::fromUtf8(raw).trimmed();
         const int colon = line.indexOf(':');
         if (colon == -1 || line.left(colon).trimmed() == QStringLiteral("lo")) continue;
         const auto fields = line.mid(colon + 1).split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);

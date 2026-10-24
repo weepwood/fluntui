@@ -6,10 +6,10 @@
 
 namespace fsi {
 std::string humanBytes(std::uint64_t bytes) {
-    static const char* units[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+    static const char* units[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
     double value = static_cast<double>(bytes);
     int unit = 0;
-    while (value >= 1024.0 && unit < 5) { value /= 1024.0; ++unit; }
+    while (value >= 1024.0 && unit < 6) { value /= 1024.0; ++unit; }
     std::ostringstream result;
     result << std::fixed << std::setprecision(unit == 0 ? 0 : 1) << value << ' ' << units[unit];
     return result.str();

@@ -36,12 +36,20 @@ public:
     SystemCollector();
     SystemSnapshot sample();
 private:
+    void ensureStaticInfo();
     double sampleCpu();
     void sampleMemory(SystemSnapshot& result);
     void sampleNetwork(SystemSnapshot& result);
     QString cpuModel() const;
     QString gpuModel() const;
     quint64 uptimeSeconds() const;
+    QString m_hostname;
+    QString m_systemName;
+    QString m_cpuModel;
+    QString m_gpuModel;
+    QString m_architecture;
+    int m_logicalCores = 0;
+    bool m_hasStaticInfo = false;
     quint64 m_cpuIdle = 0;
     quint64 m_cpuTotal = 0;
     bool m_hasCpu = false;
