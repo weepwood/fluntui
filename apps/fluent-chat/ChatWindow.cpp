@@ -10,6 +10,8 @@
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QKeySequence>
+#include <QShortcut>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
