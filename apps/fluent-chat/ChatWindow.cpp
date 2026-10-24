@@ -324,7 +324,10 @@ void ChatWindow::switchView(View view) {
         m_listTitle->setText(view == View::Contacts ? QStringLiteral("通讯录") : QStringLiteral("消息"));
         m_mainStack->setCurrentWidget(m_blankPage);
     }
-    if (view != View::Conversations) m_conversationId.clear();
+    // Clear the active conversation when leaving its visible pane so unseen messages
+    // are not silently marked as read by background polling.
+    m_conversationId.clear();
+    m_lastMessageMarker.clear();
     refreshList();
 }
 
