@@ -1,6 +1,6 @@
 # Fluent System Info · C++ / Qt 6
 
-> **v0.2.0** · 电脑硬件信息展示与实时资源监控 Demo。使用 **Qt 6 Widgets + C++17 + [Fluent-Qt](https://github.com/calvinhxx/Fluent-Qt)** 原生组件，不需要 Python、PySide6 或 psutil。
+> **v0.3.0** · 电脑硬件信息展示与实时资源监控 Demo。使用 **Qt 6 Widgets + C++17 + [Fluent-Qt](https://github.com/calvinhxx/Fluent-Qt)** 原生组件，不需要 Python、PySide6 或 psutil。
 
 仓库：[weepwood/fluntui](https://github.com/weepwood/fluntui)。本项目可直接在 Qt Creator 中打开，采用 C++ Qt 6 原生组件。
 
@@ -82,15 +82,15 @@ ctest --test-dir build-core --output-on-failure
 
 ### 首次发版和后续发版
 
-`CMakeLists.txt` 中的版本 `0.2.0` 对应 `v0.2.0` Release。第一次部署 `main` 后将尝试自动发布：
+`CMakeLists.txt` 中的版本 `0.3.0` 对应 `v0.3.0` Release。将新版本号推送至 `main` 后会自动发布：
 
-`FluentSystemInfo-v0.2.0-Windows-x64.zip` 和 `SHA256SUMS.txt`。
+`FluentSystemInfo-v0.3.0-Windows-x64.zip` 和 `SHA256SUMS.txt`。
 
-后续版本发布，先修改 `project(FluentSystemInfo VERSION 0.2.1 ...)` 的版本号并推送 `main`，系统自动创建 `v0.2.1` Release；也可以将相同版本的标签推送到远端。
+后续版本发布，先修改 `project(FluentSystemInfo VERSION 0.3.1 ...)` 的版本号并推送 `main`，系统自动创建 `v0.3.1` Release；也可以将相同版本的标签推送到远端。
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
 ZIP 为便携目录，包含 EXE、Qt 运行库和必要平台插件，不是单文件 EXE 或安装器。尚未代码签名；Windows SmartScreen 可能提示。首次 CI 编译能否通过取决于 FluentQt 上游版本与 Qt SDK 的实际兼容性，请以 Actions 结果为准。**Release 只有在 Windows 编译、单元测试和已部署 Qt 的无界面控件初始化检查成功后才会创建。完整窗口仍需 Windows 实机验收。**
