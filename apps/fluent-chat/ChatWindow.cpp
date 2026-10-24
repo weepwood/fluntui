@@ -40,6 +40,8 @@ fluent::basicinput::Button* button(const QString& text, QWidget* parent,
 }
 QLabel* label(const QString& text, const QString& id, QWidget* parent) {
     auto* result = new QLabel(text, parent);
+    // User names, conversation titles and messages must never be parsed as rich text.
+    result->setTextFormat(Qt::PlainText);
     result->setObjectName(id);
     result->setWordWrap(true);
     return result;
