@@ -36,6 +36,18 @@ int main() {
     CHECK(deltaRate(3000, 1000, 1.0) == 2000.0);
     CHECK(deltaRate(900, 1000, 1.0) == 0.0);
     CHECK(deltaRate(1100, 1000, 0.0) == 0.0);
+    CHECK(normalizeSamplingInterval(-1) == 2000);
+    CHECK(normalizeSamplingInterval(0) == 2000);
+    CHECK(normalizeSamplingInterval(1000) == 1000);
+    CHECK(normalizeSamplingInterval(2000) == 2000);
+    CHECK(normalizeSamplingInterval(5000) == 5000);
+    CHECK(normalizeSamplingInterval(10000) == 10000);
+    CHECK(normalizeSamplingInterval(2500) == 2000);
+    CHECK(nextSamplingInterval(1000) == 2000);
+    CHECK(nextSamplingInterval(2000) == 5000);
+    CHECK(nextSamplingInterval(5000) == 10000);
+    CHECK(nextSamplingInterval(10000) == 1000);
+    CHECK(nextSamplingInterval(-1) == 5000);
     CHECK(humanUptime(0) == "0h 0m");
     CHECK(humanUptime(60) == "0h 1m");
     CHECK(humanUptime(3600) == "1h 0m");

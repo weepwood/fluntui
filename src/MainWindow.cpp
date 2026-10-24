@@ -3,6 +3,14 @@
 #include "TrendGraph.h"
 #include <QColor>
 #include <QDateTime>
+#include <QDir>
+#include <QFileDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMessageBox>
+#include <QSaveFile>
+#include <QStorageInfo>
 #include <QGuiApplication>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -82,13 +90,20 @@ MainWindow::MainWindow() {
     }
 
     QSettings settings;
+    m_refreshIntervalMs = fsi::normalizeSamplingInterval(
+        settings.value(QStringLiteral("refreshIntervalMs"), 2000).toInt());
     applyTheme(settings.value(QStringLiteral("darkTheme"), true).toBool());
     selectPage(0);
-    refresh();
     m_refreshTimer = new QTimer(this);
-    m_refreshTimer->setInterval(2000);
+    m_refreshTimer->setInterval(m_refreshIntervalMs);
     QObject::connect(m_refreshTimer, &QTimer::timeout, this, [this] { refresh(); });
+    refresh();
+    updateMonitoringControls();
     m_refreshTimer->start();
+    auto* pauseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+P")), this);
+    QObject::connect(pauseShortcut, &QShortcut::activated, this, [this] { toggleMonitoring(); });
+    auto* exportShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+E")), this);
+    QObject::connect(exportShortcut, &QShortcut::activated, this, [this] { exportSnapshot(); });
 }
 
 MainWindow::~MainWindow() {
@@ -149,6 +164,34 @@ QWidget* MainWindow::createSidebar() {
         layout->addWidget(button);
     }
     layout->addStretch();
+
+    layout->addWidget(label(QStringLiteral("监控控制  /  CONTROLS"), "eyebrow", sidebar));
+    m_intervalButton = new fluent::basicinput::Button(QStringLiteral("采样间隔  2 秒"), sidebar);
+    m_intervalButton->setFluentStyle(fluent::basicinput::Button::Subtle);
+    m_intervalButton->setMinimumHeight(38);
+    m_intervalButton->setToolTip(QStringLiteral("点击切换 1 / 2 / 5 / 10 秒采样间隔"));
+    layout->addWidget(m_intervalButton);
+    QObject::connect(m_intervalButton, &QPushButton::clicked, this, [this] {
+        m_refreshIntervalMs = fsi::nextSamplingInterval(m_refreshIntervalMs);
+        QSettings().setValue(QStringLiteral("refreshIntervalMs"), m_refreshIntervalMs);
+        if (m_refreshTimer) m_refreshTimer->setInterval(m_refreshIntervalMs);
+        updateMonitoringControls();
+    });
+
+    m_pauseButton = new fluent::basicinput::Button(QStringLiteral("暂停监控"), sidebar);
+    m_pauseButton->setFluentStyle(fluent::basicinput::Button::Subtle);
+    m_pauseButton->setMinimumHeight(38);
+    layout->addWidget(m_pauseButton);
+    QObject::connect(m_pauseButton, &QPushButton::clicked, this, [this] { toggleMonitoring(); });
+
+    auto* exportButton = new fluent::basicinput::Button(QStringLiteral("导出 JSON 快照"), sidebar);
+    exportButton->setFluentStyle(fluent::basicinput::Button::Subtle);
+    exportButton->setMinimumHeight(38);
+    exportButton->setToolTip(QStringLiteral("将当前采样的系统信息保存为本地 JSON 文件 (Ctrl+E)"));
+    layout->addWidget(exportButton);
+    QObject::connect(exportButton, &QPushButton::clicked, this, [this] { exportSnapshot(); });
+    layout->addSpacing(12);
+
     auto* footerRow = new QHBoxLayout;
     footerRow->setSpacing(8);
     footerRow->addWidget(fontIcon(QStringLiteral("ic_fluent_shield_20_regular"), sidebar, 14));
@@ -251,7 +294,7 @@ QLabel* MainWindow::addInfoRow(QVBoxLayout* layout, const QString& title) {
 QWidget* MainWindow::createOverview() {
     QVBoxLayout* page;
     auto* scroll = makePage(QStringLiteral("你的电脑，一目了然。"),
-        QStringLiteral("使用原生 Qt 6 + FluentQt 组件实时观察设备状态。每 2 秒刷新一次。"), page);
+        QStringLiteral("使用原生 Qt 6 + FluentQt 组件实时观察设备状态；采样间隔可在侧栏调整。"), page);
     auto* grid = new QGridLayout;
     grid->setContentsMargins(0, 3, 0, 0);
     grid->setHorizontalSpacing(17);
@@ -261,7 +304,7 @@ QWidget* MainWindow::createOverview() {
     m_memory = createUsageTile(grid, 0, 1, QStringLiteral("系统内存 / RAM"),
         QStringLiteral("ic_fluent_memory_16_regular"), QStringLiteral("已使用"));
     m_disk = createUsageTile(grid, 1, 0, QStringLiteral("系统磁盘 / DISK"),
-        QStringLiteral("ic_fluent_hard_drive_20_regular"), QStringLiteral("首个卷"));
+        QStringLiteral("ic_fluent_hard_drive_20_regular"), QStringLiteral("系统卷"));
     m_uptime = createUsageTile(grid, 1, 1, QStringLiteral("系统运行时间"),
         QStringLiteral("ic_fluent_history_20_regular"), QStringLiteral("UPTIME"), false);
     page->addLayout(grid);
@@ -407,6 +450,10 @@ void MainWindow::rebuildDiskCards(const QVector<DiskInfo>& disks) {
 
 void MainWindow::refresh() {
     const SystemSnapshot s = m_collector.sample();
+    m_lastSnapshot = s;
+    m_hasSnapshot = true;
+    m_lastUpdateTime = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
+    m_sampledAtIso = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
     const quint64 usedMemory = s.memoryTotal > s.memoryAvailable ? s.memoryTotal - s.memoryAvailable : 0;
     const double memoryPercent = fsi::percentage(usedMemory, s.memoryTotal);
     m_cpu.value->setText(textPercent(s.cpuPercent));
@@ -418,7 +465,13 @@ void MainWindow::refresh() {
     m_uptime.value->setText(QString::fromStdString(fsi::humanUptime(s.uptime)));
     m_uptime.detail->setText(QStringLiteral("自上次启动以来"));
     if (!s.disks.isEmpty()) {
-        const DiskInfo& disk = s.disks.first();
+        // Use the actual system/root volume instead of relying on mount order.
+        const QString systemRoot = QStorageInfo::root().rootPath();
+        const auto systemDisk = std::find_if(s.disks.cbegin(), s.disks.cend(),
+            [&systemRoot](const DiskInfo& disk) {
+                return disk.name.compare(systemRoot, Qt::CaseInsensitive) == 0;
+            });
+        const DiskInfo& disk = systemDisk != s.disks.cend() ? *systemDisk : s.disks.first();
         const quint64 used = disk.total - std::min(disk.free, disk.total);
         const double percent = fsi::percentage(used, disk.total);
         m_disk.value->setText(textPercent(percent));
@@ -450,8 +503,110 @@ void MainWindow::refresh() {
     m_networkMessage->setText(s.networkSupported
         ? QStringLiteral("注意：接口计数器可能包含 VPN / 虚拟网卡，网络切换时速率可能暂时显示 0。")
         : QStringLiteral("该平台尚未实现网络字节计数器。"));
-    m_status->setText(QStringLiteral("●  正常运行  ·  最近更新 %1")
-                      .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"))));
+    updateMonitoringControls();
+}
+
+void MainWindow::toggleMonitoring() {
+    m_paused = !m_paused;
+    if (m_refreshTimer) {
+        if (m_paused) {
+            m_refreshTimer->stop();
+        } else {
+            refresh();
+            m_refreshTimer->start(m_refreshIntervalMs);
+        }
+    }
+    updateMonitoringControls();
+}
+
+void MainWindow::updateMonitoringControls() {
+    if (m_intervalButton) {
+        m_intervalButton->setText(QStringLiteral("采样间隔  %1 秒").arg(m_refreshIntervalMs / 1000));
+    }
+    if (m_pauseButton) {
+        m_pauseButton->setText(m_paused ? QStringLiteral("继续监控") : QStringLiteral("暂停监控"));
+    }
+    if (m_status) {
+        m_status->setText(QStringLiteral("●  %1  ·  最近更新 %2")
+            .arg(m_paused ? QStringLiteral("监控已暂停") : QStringLiteral("正在监控"),
+                 m_lastUpdateTime.isEmpty() ? QStringLiteral("--:--:--") : m_lastUpdateTime));
+    }
+}
+
+void MainWindow::exportSnapshot() {
+    if (!m_hasSnapshot) {
+        QMessageBox::information(this, QStringLiteral("尚无数据"), QStringLiteral("请先采样再导出。"));
+        return;
+    }
+    const QString suggestedPath = QDir::home().filePath(
+        QStringLiteral("FluentSystemInfo-%1.json")
+            .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"))));
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("导出本机信息"), suggestedPath, QStringLiteral("JSON 文件 (*.json)"));
+    if (path.isEmpty()) return;
+
+    const SystemSnapshot& s = m_lastSnapshot;
+    QJsonArray volumes;
+    for (const DiskInfo& disk : s.disks) {
+        const quint64 used = disk.total - std::min(disk.free, disk.total);
+        volumes.append(QJsonObject{
+            {QStringLiteral("path"), disk.name},
+            {QStringLiteral("filesystem"), disk.filesystem},
+            {QStringLiteral("totalBytes"), static_cast<double>(disk.total)},
+            {QStringLiteral("availableBytes"), static_cast<double>(disk.free)},
+            {QStringLiteral("usedBytes"), static_cast<double>(used)},
+            {QStringLiteral("usedPercent"), fsi::percentage(used, disk.total)}
+        });
+    }
+    const QJsonObject payload{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("appVersion"), QString::fromLatin1(FSI_APP_VERSION)},
+        {QStringLiteral("sampledAt"), m_sampledAtIso},
+        {QStringLiteral("exportedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+        {QStringLiteral("hardware"), QJsonObject{
+            {QStringLiteral("hostname"), s.hostname},
+            {QStringLiteral("systemName"), s.systemName},
+            {QStringLiteral("architecture"), s.architecture},
+            {QStringLiteral("processor"), s.cpuName},
+            {QStringLiteral("graphicsAdapter"), s.gpuName},
+            {QStringLiteral("logicalCores"), s.logicalCores},
+            {QStringLiteral("ipv4"), s.ipv4}
+        }},
+        {QStringLiteral("resources"), QJsonObject{
+            {QStringLiteral("cpuPercent"), s.cpuPercent < 0
+                ? QJsonValue(QJsonValue::Null) : QJsonValue(s.cpuPercent)},
+            {QStringLiteral("memoryTotalBytes"), static_cast<double>(s.memoryTotal)},
+            {QStringLiteral("memoryAvailableBytes"), static_cast<double>(s.memoryAvailable)},
+            {QStringLiteral("uptimeSeconds"), static_cast<double>(s.uptime)}
+        }},
+        {QStringLiteral("network"), QJsonObject{
+            {QStringLiteral("supported"), s.networkSupported},
+            {QStringLiteral("downloadBytesPerSecond"), s.downloadBps},
+            {QStringLiteral("uploadBytesPerSecond"), s.uploadBps},
+            {QStringLiteral("downloadedTotalBytes"), static_cast<double>(s.downloadedTotal)},
+            {QStringLiteral("uploadedTotalBytes"), static_cast<double>(s.uploadedTotal)}
+        }},
+        {QStringLiteral("disks"), volumes}
+    };
+
+    const QByteArray serialized = QJsonDocument(payload).toJson(QJsonDocument::Indented);
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, QStringLiteral("导出失败"), file.errorString());
+        return;
+    }
+    if (file.write(serialized) != serialized.size()) {
+        const QString error = file.errorString();
+        file.cancelWriting();
+        QMessageBox::warning(this, QStringLiteral("导出失败"), error);
+        return;
+    }
+    if (!file.commit()) {
+        QMessageBox::warning(this, QStringLiteral("导出失败"), file.errorString());
+        return;
+    }
+    QMessageBox::information(this, QStringLiteral("导出成功"),
+        QStringLiteral("本地快照已保存至：\n%1\n\n注意：文件可能包含主机名和局域网 IP，请谨慎分享。").arg(path));
 }
 
 void MainWindow::applyTheme(bool dark) {

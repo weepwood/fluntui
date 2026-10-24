@@ -43,15 +43,17 @@ void TrendGraph::paintEvent(QPaintEvent*) {
     }
     QPainterPath path;
     const int count = m_samples.size();
+    // Fixed 48 slots prevent short histories from stretching across the graph.
+    const qreal step = area.width() / 47.0;
     for (int i = 0; i < count; ++i) {
-        const qreal x = area.left() + area.width() * i / std::max(1, count - 1);
+        const qreal x = area.right() - step * (count - 1 - i);
         const qreal y = area.bottom() - area.height() * m_samples[i] / 100.0;
         if (i == 0) path.moveTo(x, y);
         else path.lineTo(x, y);
     }
     QPainterPath fill(path);
-    fill.lineTo(area.left() + area.width(), area.bottom());
-    fill.lineTo(area.left(), area.bottom());
+    fill.lineTo(area.right(), area.bottom());
+    fill.lineTo(area.right() - step * (count - 1), area.bottom());
     fill.closeSubpath();
     QLinearGradient gradient(area.topLeft(), area.bottomLeft());
     QColor strong = line;
@@ -63,7 +65,7 @@ void TrendGraph::paintEvent(QPaintEvent*) {
     painter.fillPath(fill, gradient);
     painter.setPen(QPen(line, 2.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.drawPath(path);
-    const qreal lastX = area.left() + area.width();
+    const qreal lastX = area.right();
     const qreal lastY = area.bottom() - area.height() * m_samples.last() / 100.0;
     painter.setBrush(line);
     painter.drawEllipse(QPointF(lastX, lastY), 3.5, 3.5);
