@@ -1,0 +1,11 @@
+# Separate executable, with the same pinned FluentQt dependency as System Info.
+qt_add_executable(fluent-chat WIN32 main.cpp ChatWindow.h ChatWindow.cpp ApiClient.h)
+target_link_libraries(fluent-chat PRIVATE FluentQt::FluentQt Qt6::Widgets Qt6::Network)
+target_compile_definitions(fluent-chat PRIVATE UNICODE _UNICODE)
+if(MSVC)
+    target_compile_options(fluent-chat PRIVATE /utf-8)
+endif()
+if(WIN32)
+    target_compile_definitions(fluent-chat PRIVATE WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+    target_link_libraries(fluent-chat PRIVATE user32)
+endif()
